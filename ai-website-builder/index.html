@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Website Builder - Prompt likho, website pao</title>
+<meta name="description" content="Bas prompt likhiye aur AI aapke liye website ya web app bana dega. Free, tez aur download karne layak.">
+<style>
+  :root{--bg:#0f1117;--panel:#171a23;--line:#262b38;--text:#e8eaf0;--muted:#8b93a7;--accent:#6c8cff;--accent2:#8b5cf6}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+  header h1{font-size:18px;margin:0;font-weight:650}
+  header span{color:var(--muted);font-size:13px}
+  main{flex:1;display:grid;grid-template-columns:380px 1fr;min-height:0}
+  @media(max-width:860px){main{grid-template-columns:1fr}}
+  .left{padding:18px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+  @media(max-width:860px){.left{border-right:0;border-bottom:1px solid var(--line)}}
+  label{font-size:13px;color:var(--muted)}
+  textarea{width:100%;min-height:150px;resize:vertical;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;font-size:15px;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:10px 14px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#fff;font-weight:600;padding:12px}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chips button{font-size:12px;padding:6px 10px;color:var(--muted)}
+  .right{display:flex;flex-direction:column;min-height:420px}
+  .bar{display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+  .bar .tab.active{border-color:var(--accent);color:var(--accent)}
+  .bar .sp{flex:1}
+  .stage{flex:1;position:relative;background:#fff}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
+  pre{position:absolute;inset:0;margin:0;padding:14px;overflow:auto;background:#0b0d12;color:#cfd6e6;font-size:12.5px;display:none;white-space:pre-wrap;word-break:break-word}
+  .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#666;background:var(--bg);text-align:center;padding:24px}
+  .status{font-size:13px;color:var(--muted);min-height:18px}
+  .status.err{color:#ff7a7a}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ AI Website Builder</h1>
+  <span>Prompt likho → website pao</span>
+</header>
+<main>
+  <section class="left">
+    <label for="prompt">Aapko kya banana hai?</label>
+    <textarea id="prompt" placeholder="Jaise: Ek restaurant ki website banao jisme menu, gallery, booking form aur dark theme ho..."></textarea>
+    <div class="chips" id="chips"></div>
+    <button class="primary" id="go">Website banao</button>
+    <div class="status" id="status"></div>
+    <label style="margin-top:6px">Tip: Pehli baar ban jaye to neeche naya prompt likho jaise "button ka color hara karo" ya "pricing section jodo" aur dobara dabao. Ye purani website ko badlega. Naya shuru karne ke liye "Naya shuru" dabao.</label>
+    <button id="reset">Naya shuru</button>
+  </section>
+  <section class="right">
+    <div class="bar">
+      <button class="tab active" id="tPrev">Preview</button>
+      <button class="tab" id="tCode">Code</button>
+      <div class="sp"></div>
+      <button id="copy" disabled>Code copy</button>
+      <button id="dl" disabled>Download .html</button>
+      <button id="open" disabled>Naye tab me kholo</button>
+    </div>
+    <div class="stage">
+      <iframe id="frame" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+      <pre id="code"></pre>
+      <div class="empty" id="empty">Yahan aapki website ka preview dikhega.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const examples = [
+  "Portfolio website for a photographer, dark theme, gallery grid and contact form",
+  "Todo app jisme tasks add, delete aur complete ho sake, localStorage me save ho",
+  "Landing page for a fitness app with pricing and FAQ",
+  "Simple calculator app with history"
+];
+let currentHtml = "";
+let busy = false;
+
+examples.forEach(t => {
+  const b = document.createElement("button");
+  b.textContent = t.length > 38 ? t.slice(0, 36) + "…" : t;
+  b.title = t;
+  b.onclick = () => { $("prompt").value = t; };
+  $("chips").appendChild(b);
+});
+
+function setStatus(msg, err) {
+  $("status").textContent = msg || "";
+  $("status").className = "status" + (err ? " err" : "");
+}
+
+function show(html) {
+  currentHtml = html;
+  $("frame").srcdoc = html;
+  $("code").textContent = html;
+  $("empty").style.display = "none";
+  ["copy", "dl", "open"].forEach(i => $(i).disabled = false);
+}
+
+$("go").onclick = async () => {
+  if (busy) return;
+  const prompt = $("prompt").value.trim();
+  if (prompt.length < 5) { setStatus("Thoda detail me prompt likhiye.", true); return; }
+  busy = true;
+  $("go").disabled = true;
+  setStatus("AI bana raha hai… 20-60 second lag sakte hain.");
+  try {
+    const r = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, currentHtml })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || "Server error " + r.status);
+    show(data.html);
+    setStatus("Ho gaya! Badlav ke liye naya prompt likhkar dobara dabao.");
+    $("prompt").value = "";
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    busy = false;
+    $("go").disabled = false;
+  }
+};
+
+$("reset").onclick = () => {
+  currentHtml = "";
+  $("frame").srcdoc = "";
+  $("code").textContent = "";
+  $("empty").style.display = "flex";
+  ["copy", "dl", "open"].forEach(i => $(i).disabled = true);
+  setStatus("");
+};
+
+function tab(preview) {
+  $("frame").style.display = preview ? "block" : "none";
+  $("code").style.display = preview ? "none" : "block";
+  $("tPrev").classList.toggle("active", preview);
+  $("tCode").classList.toggle("active", !preview);
+}
+$("tPrev").onclick = () => tab(true);
+$("tCode").onclick = () => tab(false);
+
+$("copy").onclick = async () => {
+  await navigator.clipboard.writeText(currentHtml);
+  setStatus("Code copy ho gaya.");
+};
+$("dl").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([currentHtml], { type: "text/html" }));
+  a.download = "my-website.html";
+  a.click();
+};
+$("open").onclick = () => {
+  const w = window.open("about:blank");
+  w.document.write(currentHtml);
+  w.document.close();
+};
+</script>
+</body>
+</html>
